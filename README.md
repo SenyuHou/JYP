@@ -1,6 +1,6 @@
 # Just Y-Prediction: Enabling Historical Cumulative Inconsistency in Label Diffusion for Learning with Noisy Labels
 
-**ICML 2026**
+# Acceppted on ICML 2026
 
 ## Abstract
 
@@ -51,7 +51,7 @@ python train_on_CIFAR_JYP.py --device cuda:0 --dataset cifar10 --noise_type huma
 --ddim_n_step 10 --seed 42
 ```
 
-### 3.2 Animal10N<br />
+### 3.2 Animal-10N<br />
 
 The dataset should be downloaded according to the instruction here: [Aniaml10N](https://dm.kaist.ac.kr/datasets/animal-10n/)<br />
 Default values for input arguments are given in the code. An example command is given:
