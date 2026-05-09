@@ -1,0 +1,52 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments and local config
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and experiment outputs
+logs/
+runs/
+outputs/
+results/
+checkpoints/
+wandb/
+tensorboard/
+
+# Datasets and generated labels/features
+data/
+datasets/
+features/
+noise_label_saved/
+noise_statistics/
+
+# Model weights and serialized artifacts
+model/
+models/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.pkl
+*.pickle
+*.npy
+*.npz
+
+# Archives and temporary files
+*.zip
+*.tar
+*.tar.gz
+*.tmp
+*.log
