@@ -5,6 +5,15 @@ from sklearn.mixture import GaussianMixture
 import scipy.stats as stats
 from sklearn.cluster import KMeans
 
+def _as_long_tensor(indices, device):
+    if isinstance(indices, torch.Tensor):
+        return indices.to(device=device, dtype=torch.long).flatten()
+    if indices is None:
+        return torch.empty(0, dtype=torch.long, device=device)
+    if isinstance(indices, (int, np.integer)):
+        return torch.tensor([int(indices)], dtype=torch.long, device=device)
+    return torch.as_tensor(indices, dtype=torch.long, device=device).flatten()
+
 def cluster_and_reassign_labels(query_embd, y_query, k_clusters=10):
 
     # Perform K-means clustering
@@ -135,6 +144,50 @@ def label_distribution(query_embd, y_query, prior_embd, labels, k=50, n_class=10
     _, max_prob_label = torch.max(neighbour_label_distribution, dim=1)
 
     return max_prob_label, neighbour_label_distribution
+
+def knn_label_distribution_excluding_self(query_embd, y_query, prior_embd, labels, k=50, n_class=10, use_cosine_similarity=True):
+    """
+    Estimate labels with the empirical label distribution of k nearest neighbors.
+    If the query sample is present in the prior set, its self-neighbor is removed.
+    """
+    n_sample = query_embd.shape[0]
+    n_prior = prior_embd.shape[0]
+    device = query_embd.device
+    labels = labels.to(device)
+    y_query = y_query.to(device)
+
+    search_k = min(k + 1, n_prior)
+    neighbour_v, neighbour_ind = knn_cos(
+        query_embd,
+        prior_embd,
+        k=search_k,
+        use_cosine_similarity=use_cosine_similarity
+    )
+
+    label_estimation = torch.zeros((n_sample, n_class), device=device)
+    for i in range(n_sample):
+        row_values = neighbour_v[i]
+        row_indices = neighbour_ind[i]
+
+        if use_cosine_similarity:
+            self_pos = torch.nonzero(row_values >= 1.0 - 1e-6, as_tuple=False).flatten()
+        else:
+            self_pos = torch.nonzero(row_values <= 1e-6, as_tuple=False).flatten()
+
+        if self_pos.numel() > 0:
+            keep_mask = torch.ones(row_indices.shape[0], dtype=torch.bool, device=device)
+            keep_mask[self_pos[0]] = False
+            row_indices = row_indices[keep_mask]
+
+        row_indices = row_indices[:min(k, row_indices.shape[0])]
+        if row_indices.numel() == 0:
+            label_estimation[i] = F.one_hot(y_query[i], num_classes=n_class).float()
+            continue
+
+        neighbour_labels = labels[row_indices]
+        label_estimation[i] = F.one_hot(neighbour_labels, num_classes=n_class).float().mean(dim=0)
+
+    return label_estimation
 
 def KL_label_distribution(neighbour_label_distribution_w, neighbour_label_distribution_s):
     """
@@ -316,7 +369,7 @@ def get_loss_weights_random_sample(query_embd, y_query, prior_embd, labels, k=10
 
 def sample_labels_in_two_view(fp_embd_w, fp_embd_s, y_noisy, weak_embed, strong_embed, noisy_labels, device='cpu', k=50, n_class=10, use_cosine_similarity=True, to_single_label=True):
     """
-    Compute the label distribution for noisy datasets and perform KL divergence calculation, GMM binary split, and label sampling.
+    Estimate labels from each augmented view with k-nearest-neighbor label distributions.
 
     Parameters:
     - fp_embd_w: Feature embeddings for the weakly augmented dataset.
@@ -329,57 +382,32 @@ def sample_labels_in_two_view(fp_embd_w, fp_embd_s, y_noisy, weak_embed, strong_
     - k: Number of nearest neighbors to consider (default is 50).
     - n_class: Number of classes (default is 10).
     - use_cosine_similarity: Whether to use cosine similarity (default is True).
-    - to_single_label: Whether to convert the output labels to single integer labels (default is True).
+    - to_single_label: Kept for backward compatibility. This function returns label distributions.
 
     Returns:
-    - y_label_batch_w: Sampled labels for the weakly augmented dataset.
-    - y_label_batch_s: Sampled labels for the strongly augmented dataset.
+    - y_label_batch_w: kNN label distributions for the weakly augmented dataset.
+    - y_label_batch_s: kNN label distributions for the strongly augmented dataset.
     - loss_weights_w: Loss weights for the weakly augmented dataset.
     - loss_weights_s: Loss weights for the strongly augmented dataset.
     """
-    # Compute the label distribution for the noisy datasets
-    max_prob_label_w, neighbour_label_distribution_w = label_distribution(
+    y_label_batch_w = knn_label_distribution_excluding_self(
         query_embd=fp_embd_w,
         y_query=y_noisy,
         prior_embd=weak_embed,
         labels=noisy_labels,
         k=k,
         n_class=n_class,
-        weighted=True,
         use_cosine_similarity=use_cosine_similarity
     )
 
-    max_prob_label_s, neighbour_label_distribution_s = label_distribution(
+    y_label_batch_s = knn_label_distribution_excluding_self(
         query_embd=fp_embd_s,
         y_query=y_noisy,
         prior_embd=strong_embed,
         labels=noisy_labels,
         k=k,
         n_class=n_class,
-        weighted=True,
         use_cosine_similarity=use_cosine_similarity
-    )
-
-    kl_div = KL_label_distribution(neighbour_label_distribution_w.cpu(), neighbour_label_distribution_s.cpu())
-
-    lower_set_batch, higher_set_batch = gmm_binary_split(kl_div)
-
-    y_label_batch_w = sample_labels(
-        neighbour_label_distribution_w,
-        y_noisy,
-        max_prob_label_w,
-        lower_set_batch,
-        higher_set_batch,
-        to_single_label=to_single_label
-    )
-
-    y_label_batch_s = sample_labels(
-        neighbour_label_distribution_s,
-        y_noisy,
-        max_prob_label_s,
-        lower_set_batch,
-        higher_set_batch,
-        to_single_label=to_single_label
     )
 
     loss_weights_w = get_loss_weights(fp_embd_w, y_noisy, weak_embed, noisy_labels, y_label_batch_w, k=k, n_class=n_class, use_cosine_similarity = use_cosine_similarity)
@@ -451,7 +479,8 @@ def fit_gmm_w_hard(historical_diff_w, noisy_labels, n_class, clean_threshold=0.5
 
             # Add noisy samples, excluding those already in clean_id
             noisy_indices = class_indices[noisy_mask]
-            noisy_indices = noisy_indices[~torch.isin(noisy_indices, torch.tensor(predict_clean_id).to(historical_diff_w.device))]
+            clean_id_tensor = _as_long_tensor(predict_clean_id, historical_diff_w.device)
+            noisy_indices = noisy_indices[~torch.isin(noisy_indices, clean_id_tensor)]
             predict_noisy_id.extend(noisy_indices.cpu().tolist())
 
 
@@ -525,10 +554,14 @@ def fit_gmm_w_hard(historical_diff_w, noisy_labels, n_class, clean_threshold=0.5
         hard_mask = ~(clean_mask | noisy_mask)     # Hard samples are those that don't belong to clean or noisy
 
         # Use nonzero() to get the indices of the samples satisfying each condition
-        predict_clean_id = torch.nonzero(clean_mask).cpu().squeeze().tolist()
-        mask_no_clean = ~torch.isin(torch.nonzero(noisy_mask).squeeze(), predict_clean_id)
-        predict_noisy_id = torch.nonzero(mask_no_clean).cpu().squeeze().tolist()
-        predict_hard_id = torch.nonzero(hard_mask).cpu().squeeze().tolist()
+        clean_indices = torch.nonzero(clean_mask, as_tuple=False).flatten()
+        noisy_indices = torch.nonzero(noisy_mask, as_tuple=False).flatten()
+        hard_indices = torch.nonzero(hard_mask, as_tuple=False).flatten()
+
+        predict_clean_id = clean_indices.cpu().tolist()
+        noisy_indices = noisy_indices[~torch.isin(noisy_indices, clean_indices)]
+        predict_noisy_id = noisy_indices.cpu().tolist()
+        predict_hard_id = hard_indices.cpu().tolist()
 
         difficulty[:] = tau_clean * lambda_clean.squeeze() + tau_noisy * (1 - lambda_noisy.squeeze())
 
@@ -597,7 +630,8 @@ def fit_gmm(historical_diff_w, noisy_labels, n_class, clean_threshold=0.5, noisy
 
             # Add noisy samples, excluding those already in clean_id
             noisy_indices = class_indices[noisy_mask]
-            noisy_indices = noisy_indices[~torch.isin(noisy_indices, torch.tensor(predict_clean_id).to(historical_diff_w.device))]
+            clean_id_tensor = _as_long_tensor(predict_clean_id, historical_diff_w.device)
+            noisy_indices = noisy_indices[~torch.isin(noisy_indices, clean_id_tensor)]
             predict_noisy_id.extend(noisy_indices.cpu().tolist())
 
             difficulty[class_indices] = tau_clean * lambda_clean.squeeze() + tau_noisy * (1 - lambda_noisy.squeeze())
@@ -646,9 +680,12 @@ def fit_gmm(historical_diff_w, noisy_labels, n_class, clean_threshold=0.5, noisy
         noisy_mask = noisy_prob > noisy_threshold  # Create mask for noisy samples
 
         # Use nonzero() to get the indices of the samples satisfying each condition
-        predict_clean_id = torch.nonzero(clean_mask).cpu().squeeze().tolist()
-        mask_no_clean = ~torch.isin(torch.nonzero(noisy_mask).squeeze(), predict_clean_id)
-        predict_noisy_id = torch.nonzero(mask_no_clean).cpu().squeeze().tolist()
+        clean_indices = torch.nonzero(clean_mask, as_tuple=False).flatten()
+        noisy_indices = torch.nonzero(noisy_mask, as_tuple=False).flatten()
+
+        predict_clean_id = clean_indices.cpu().tolist()
+        noisy_indices = noisy_indices[~torch.isin(noisy_indices, clean_indices)]
+        predict_noisy_id = noisy_indices.cpu().tolist()
 
         difficulty[:] = tau_clean * lambda_clean.squeeze() + tau_noisy * (1 - lambda_noisy.squeeze())
 
@@ -667,11 +704,17 @@ def evaluate(predicted_ids, true_indices):
     Returns:
     - precision: The precision of the predicted indices.
     """
+    device = predicted_ids.device if isinstance(predicted_ids, torch.Tensor) else (
+        true_indices.device if isinstance(true_indices, torch.Tensor) else 'cpu'
+    )
+    predicted_ids = _as_long_tensor(predicted_ids, device)
+    true_indices = _as_long_tensor(true_indices, device)
+
     # Check if predicted samples are in true indices (True Positives)
     true_positives = torch.isin(predicted_ids, true_indices).sum().item()
 
     # Calculate precision: TP / (TP + FP)
-    precision = true_positives / len(predicted_ids) * 100 if len(predicted_ids) > 0 else 0.0
-    recall = true_positives / len(true_indices) * 100 if len(true_indices) > 0 else 0.0
+    precision = true_positives / predicted_ids.numel() * 100 if predicted_ids.numel() > 0 else 0.0
+    recall = true_positives / true_indices.numel() * 100 if true_indices.numel() > 0 else 0.0
 
     return precision, recall
