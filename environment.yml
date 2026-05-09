@@ -1,0 +1,20 @@
+name: JYP-env
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.8
+  # JYP uses torch.isin, which is not available in the original DLD torch 1.7.1 environment.
+  - pytorch=1.10.2
+  - torchvision=0.11.3
+  - cudatoolkit=11.3
+  - numpy=1.22
+  - scipy=1.7
+  - scikit-learn=1.0.2
+  - pillow=9.0
+  - tqdm=4.65
+  - pip
+  - pip:
+      - ftfy==6.1.1
+      - regex==2023.12.25
+      - git+https://github.com/openai/CLIP.git
