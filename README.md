@@ -1,5 +1,15 @@
 # Just Y-Prediction: Enabling Historical Cumulative Inconsistency in Label Diffusion for Learning with Noisy Labels
 
+**ICML 2026**
+
+## Abstract
+
+Label noise is pervasive in real-world datasets and significantly compromises model generalization, fueling extensive research into Learning with Noisy Labels (LNL). Most LNL methods focus on robust discriminative learning, while recent generative classifiers such as label diffusion models (LDMs) show superior robustness by modeling class posteriors. However, current LDMs predominantly rely on standard $\boldsymbol \epsilon$-prediction, where Gaussian noise lacks explicit class semantics, limiting both optimization and inference under label noise environments. To address this issue, we propose **just $\boldsymbol y$-prediction (JYP)**, a novel training paradigm that enables LDMs to directly characterize the label manifold and leverage explicit class-semantic guidance. Theoretically, we prove that JYP converges to an optimal solution equivalent to that of $\boldsymbol \epsilon$-prediction within the label diffusion framework, while facilitating accelerated convergence and enabling one-step inference. Leveraging JYP as a foundation, we further incorporate historical cumulative inconsistency to adaptively tailor optimization strategies for clean, noisy, and hard samples. Extensive experiments demonstrate that our method consistently outperforms competitors across diverse synthetic noisy datasets and achieves state-of-the-art performance on multiple real-world benchmarks.
+
+<p align="center">
+  <img src="figs/ins1.png" width="95%" alt="Overview of JYP" />
+</p>
+
 ## 1. Preparing python environment
 
 Install requirements.<br />
@@ -58,13 +68,15 @@ python train_on_WebVision_JYP.py --gpu_devices 0 1 2 3 4 5 6 7 --dataset webvisi
 python test_on_ILSVRC2012_JYP.py --gpu_devices 0 1 2 3 4 5 6 7
 ```
 
-### 3.4 Clothing1M<br />
+## Citation
 
-The dataset should be downloaded according to the instruction here: [Clothing1M](). Default values for input arguments are given in the code. <br />
+If you find this work useful, please consider citing:
 
+```bibtex
+@inproceedings{hou2026jyp,
+  title     = {Just Y-Prediction: Enabling Historical Cumulative Inconsistency in Label Diffusion for Learning with Noisy Labels},
+  author    = {Hou, Senyu and Jiang, Gaoxia and Zheng, Xinyi and Guo, Yaqing and Liang, Shuna and Wang, Wenjian},
+  booktitle = {Proceedings of the 43rd International Conference on Machine Learning},
+  year      = {2026}
+}
 ```
-python train_on_Clothing1M_JYP.py --gpu_devices 0 1 2 3 4 5 6 7 --dataset clothing1m \
---nepoch 200 --batch_size 128 --warmup_epochs 5 --BETA 0.2 --lr 1e-3 \
---ddim_n_step 10 --seed 42
-```
-
