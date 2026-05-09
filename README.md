@@ -33,7 +33,7 @@ pip install git+https://github.com/openai/CLIP.git  --no-dependencies
 
 Trained checkpoints for the diffusion models are available at [here]().
 
-## 3. Run demo script to train the NLPD models
+## 3. Run demo script to train the JYP models
 
 ### 3.1 CIFAR-10 , CIFAR-100 and CIFAR-N<br />
 
@@ -41,6 +41,12 @@ Default values for input arguments are given in the code. An example command is 
 
 ```
 python train_on_CIFAR_JYP.py --device cuda:0 --dataset cifar10 --noise_type sym --noise_ratio 0.5 \
+--nepoch 200 --warmup_epochs 5 --BETA 0.2 --lr 1e-3 \
+--ddim_n_step 10 --seed 42
+```
+
+```
+python train_on_CIFAR_JYP.py --device cuda:0 --dataset cifar10 --noise_type human_wors\_label --noise_ratio 0.4 \
 --nepoch 200 --warmup_epochs 5 --BETA 0.2 --lr 1e-3 \
 --ddim_n_step 10 --seed 42
 ```
@@ -80,3 +86,4 @@ If you find this work useful, please consider citing:
   year      = {2026}
 }
 ```
+

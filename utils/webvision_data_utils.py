@@ -195,12 +195,12 @@ class WebVision_dataset(data.Dataset):
             for i in unique_labels:
                 idx = np.where(l == i)[0]
 
-                # 每个类单独判断
+                # Handle each class independently.
                 cur_class_count = len(idx)
                 cur_cls_size = min(cur_class_count, cls_size)
 
                 if cur_class_count < cls_size:
-                    print(f"[Class {i}] samples {cur_class_count} < cls_size({cls_size}), final select {cur_cls_size}。")
+                    print(f"[Class {i}] samples {cur_class_count} < cls_size({cls_size}), final select {cur_cls_size}.")
 
                 if randomize:
                     idx = np.random.permutation(idx)

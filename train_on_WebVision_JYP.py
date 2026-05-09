@@ -1,3 +1,4 @@
+import os
 import tqdm
 import random
 import time
@@ -12,8 +13,6 @@ from utils.vit_wrapper import vit_img_wrap
 from utils.animal_data_utils import Animal10N_dataset
 from utils.webvision_data_utils import WebVision_dataset
 from utils.model_ResNet import CustomResNetEncoder, pretrain_resnet
-from utils.model_SimCLR import SimCLR_encoder
-from utils.plot_loss import plot_and_save_losses, plot_historical_difference
 import torch.optim as optim
 from utils.learning import *
 from utils.precorrct_labels import *
@@ -115,15 +114,15 @@ def train(diffusion_model, train_dataset_all, train_embed_dir, test_dataset, tes
                 predict_clean_id = list(set(predict_clean_id_w).intersection(set(predict_clean_id_s)))
                 predict_noisy_id = list(set(predict_noisy_id_w).intersection(set(predict_noisy_id_s)))
                 predict_hard_id = list(set(predict_clean_id_w + predict_noisy_id_w) - set(predict_clean_id) - set(predict_noisy_id))
-                logger.info(f'Epoch {epoch} —— Clean samples: {len(predict_clean_id)}, Noisy samples: {len(predict_noisy_id)}, Hard samples: {len(predict_hard_id)}')
+                logger.info(f'Epoch {epoch} -- Clean samples: {len(predict_clean_id)}, Noisy samples: {len(predict_noisy_id)}, Hard samples: {len(predict_hard_id)}')
 
             else:
-                clean_prob_w, noisy_prob_w, predict_clean_id_w, predict_noisy_id_w, predict_hard_id_w, difficulty_w = fit_gmm(
+                clean_prob_w, noisy_prob_w, predict_clean_id_w, predict_noisy_id_w, difficulty_w = fit_gmm(
                     historical_diff_w, noisy_labels, n_class, clean_t, noisy_t, args.gmm_by_class
                 )
                 predict_clean_id = predict_clean_id_w
                 predict_noisy_id = predict_noisy_id_w
-                predict_hard_id = predict_hard_id_w
+                predict_hard_id = list(set(range(len(train_dataset.targets))) - set(predict_clean_id) - set(predict_noisy_id))
 
         with tqdm(enumerate(train_loader), total=len(train_loader), desc=f'train diffusion epoch {epoch}', ncols=120) as pbar:
             for i, data_batch in pbar:
@@ -319,17 +318,17 @@ if __name__ == "__main__":
     parser.add_argument("--cls_size", default=500, help="class size for balance", type=int)
     parser.add_argument("--lr", default=1e-3, help="learning rate", type=float)
     parser.add_argument("--BETA", default=0.2, help="loss weight for strong aug view", type=float)
-    parser.add_argument("--GAMMA", default=0.2, help="loss weight for consistency mse", type=float)
+    parser.add_argument("--GAMMA", default=1.0, help="loss weight for consistency mse", type=float)
     parser.add_argument("--gmm_by_class", default=False, help="fit gmm by each class", action='store_true')
     parser.add_argument("--clean_t", default=0.5, help="GMM clean threshold", type=float)
     parser.add_argument("--noisy_t", default=0.5, help="GMM noisy threshold", type=float)
 
     parser.add_argument("--feature_dim", default=1024, help="feature dim for encoder in diffusion model", type=int)
     parser.add_argument("--k", default=50, help="k neighbors for knn", type=int)
-    parser.add_argument("--loss_w", default=False, help="use neighbor frec weights for loss", action='store_true')
+    parser.add_argument("--loss_w", default=True, help="use neighbor frec weights for loss", action='store_false')
     parser.add_argument("--to_single_label", default=False, help="use single label for label correction", action='store_true')
     parser.add_argument("--one_view", default=False, help="use single view for diffusion", action='store_true')
-    parser.add_argument("--use_cos", default=False, help="use cosine for neighbor space", action='store_true')
+    parser.add_argument("--use_cos", default=True, help="use cosine for neighbor space", action='store_false')
     parser.add_argument("--ddim_n_step", default=10, help="number of steps in ddim", type=int)
     parser.add_argument("--one_step", default=False, help="one step for sampling", action='store_true')
     parser.add_argument("--diff_encoder", default='resnet50_l', help="which encoder for diffusion (linear, resnet18, 34, 50...)", type=str)
